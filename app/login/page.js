@@ -6,12 +6,15 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import AuthCard from "@/components/auth-card"
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog"
 
 export default function LoginPage() {
   const [formData, setFormData] = useState({ email: "", password: "" })
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState("")
   const [success, setSuccess] = useState("")
+  const [pendingOpen, setPendingOpen] = useState(false)
+  const [pendingStatus, setPendingStatus] = useState("pending")
 
   const handleChange = (e) => {
     const { name, value } = e.target
@@ -32,6 +35,12 @@ export default function LoginPage() {
       })
       const data = await res.json()
       if (!res.ok) {
+        if (data?.code === "THERAPIST_PENDING") {
+          setPendingStatus(data.therapistStatus || "pending")
+          setPendingOpen(true)
+          setLoading(false)
+          return
+        }
         throw new Error(data.error || "Login failed")
       }
       setSuccess("Login successful")
@@ -114,6 +123,26 @@ export default function LoginPage() {
           </p>
         </div>
       </AuthCard>
+
+      {/* Pending Approval Modal */}
+      <Dialog open={pendingOpen} onOpenChange={setPendingOpen}>
+        <DialogContent className="bg-white dark:bg-white">
+          <DialogHeader>
+            <DialogTitle>Account Pending Approval</DialogTitle>
+            <DialogDescription>
+              Your therapist account isn't approved yet by the admin.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="text-sm text-[hsl(var(--muted-foreground))]">
+            Current status: <span className="font-semibold capitalize">{pendingStatus}</span>
+          </div>
+          <DialogFooter>
+            <Button onClick={() => setPendingOpen(false)} className="bg-[hsl(var(--primary))] text-white">
+              Okay
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

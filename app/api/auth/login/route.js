@@ -28,6 +28,18 @@ export async function POST(req) {
       return NextResponse.json({ error: "Invalid credentials" }, { status: 401 })
     }
 
+    // Block therapists whose account has not been approved yet
+    if (user.role === "therapist" && user.therapistStatus !== "approved") {
+      return NextResponse.json(
+        {
+          error: "Your account isn't approved yet by the admin.",
+          code: "THERAPIST_PENDING",
+          therapistStatus: user.therapistStatus || "pending",
+        },
+        { status: 403 },
+      )
+    }
+
     const token = await new SignJWT({ sub: String(user._id), role: user.role })
       .setProtectedHeader({ alg: "HS256" })
       .setIssuedAt()
