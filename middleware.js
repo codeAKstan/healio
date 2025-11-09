@@ -16,6 +16,7 @@ export async function middleware(req) {
   const { pathname } = req.nextUrl
   const token = req.cookies.get("token")?.value
   const isAdminLogin = pathname === "/admin/login" || pathname.startsWith("/admin/login")
+  console.log(`[middleware] path=${pathname} token=${token ? 'present' : 'absent'}`)
 
   // Protect /admin
   if (pathname.startsWith("/admin")) {
@@ -37,13 +38,16 @@ export async function middleware(req) {
 
   // Protect /dashboard (any authenticated user)
   if (pathname.startsWith("/dashboard")) {
+    console.log("[middleware] protecting /dashboard")
     if (!token) {
       const url = new URL("/login", req.url)
+      console.log("[middleware] redirecting to /login due to missing token")
       return NextResponse.redirect(url)
     }
     const payload = await verify(token)
     if (!payload) {
       const url = new URL("/login", req.url)
+      console.log("[middleware] redirecting to /login due to invalid token")
       return NextResponse.redirect(url)
     }
     return NextResponse.next()
@@ -53,5 +57,5 @@ export async function middleware(req) {
 }
 
 export const config = {
-  matcher: ["/admin/:path*", "/dashboard/:path*"],
+  matcher: ["/admin", "/admin/:path*", "/dashboard", "/dashboard/:path*"],
 }

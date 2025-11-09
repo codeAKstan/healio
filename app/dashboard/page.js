@@ -3,13 +3,32 @@
 import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import Link from "next/link"
-import { useState } from "react"
+import { useEffect, useState } from "react"
 
 export default function DashboardPage() {
-  const [userData] = useState({
-    name: "Sarah Johnson",
-    role: "patient",
-  })
+  const [userData, setUserData] = useState(null)
+  const [loadingUser, setLoadingUser] = useState(true)
+
+  useEffect(() => {
+    let active = true
+    ;(async () => {
+      try {
+        const res = await fetch("/api/auth/me")
+        if (!res.ok) {
+          throw new Error("failed")
+        }
+        const data = await res.json()
+        if (active) setUserData(data)
+      } catch (e) {
+        // noop: middleware/layout should redirect unauthenticated
+      } finally {
+        if (active) setLoadingUser(false)
+      }
+    })()
+    return () => {
+      active = false
+    }
+  }, [])
 
   const moodStats = {
     happy: 15,
@@ -29,7 +48,14 @@ export default function DashboardPage() {
     <div className="p-6 md:p-8 space-y-8">
       {/* Welcome Section */}
       <div>
-        <h1 className="text-3xl md:text-4xl font-bold mb-2">Welcome back, {userData.name}!</h1>
+        <h1 className="text-3xl md:text-4xl font-bold mb-2">
+          {loadingUser
+            ? "Loading..."
+            : `Welcome back, ${userData?.name || userData?.email || "User"}!`}
+        </h1>
+        {!loadingUser && userData?.role && (
+          <p className="text-sm text-[hsl(var(--muted-foreground))]">Role: {userData.role}</p>
+        )}
         <p className="text-[hsl(var(--muted-foreground))]">Here's your mental wellness summary</p>
       </div>
 

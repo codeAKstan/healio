@@ -1,6 +1,7 @@
 "use client"
 
 import { useState } from "react"
+import { useRouter } from "next/navigation"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -9,6 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import AuthCard from "@/components/auth-card"
 
 export default function RegisterPage() {
+  const router = useRouter()
   const [formData, setFormData] = useState({
     name: "",
     email: "",
@@ -18,8 +20,12 @@ export default function RegisterPage() {
     gender: "",
     role: "patient",
   })
+  const [certificateFile, setCertificateFile] = useState(null)
+  const [certificateUrl, setCertificateUrl] = useState("")
+  const [uploading, setUploading] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState("")
+  const [success, setSuccess] = useState("")
 
   const handleChange = (e) => {
     const { name, value } = e.target
@@ -37,6 +43,7 @@ export default function RegisterPage() {
   const handleSubmit = async (e) => {
     e.preventDefault()
     setError("")
+    setSuccess("")
 
     if (formData.password !== formData.confirmPassword) {
       setError("Passwords do not match")
@@ -51,12 +58,46 @@ export default function RegisterPage() {
     setLoading(true)
 
     try {
-      // Simulate API call
-      console.log("Registration attempt:", formData)
-      setTimeout(() => {
-        alert("Registration would process with your backend")
-        setLoading(false)
-      }, 1000)
+      let certUrl = ""
+      if (formData.role === "therapist") {
+        if (!certificateFile) {
+          setError("Certificate required for therapist signup")
+          setLoading(false)
+          return
+        }
+        setUploading(true)
+        const fd = new FormData()
+        fd.append("file", certificateFile)
+        const upRes = await fetch("/api/uploads/therapist-certificate", { method: "POST", body: fd })
+        const upData = await upRes.json()
+        setUploading(false)
+        if (!upRes.ok) {
+          throw new Error(upData.error || "Upload failed")
+        }
+        certUrl = upData.url
+        setCertificateUrl(certUrl)
+      }
+
+      const res = await fetch("/api/auth/register", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: formData.name,
+          age: Number(formData.age),
+          gender: formData.gender,
+          email: formData.email,
+          password: formData.password,
+          role: formData.role,
+          certificateUrl: certUrl,
+        }),
+      })
+      const data = await res.json()
+      if (!res.ok) {
+        throw new Error(data.error || "Registration failed")
+      }
+      setLoading(false)
+      // Redirect to login after successful registration
+      router.push("/login")
     } catch (err) {
       setError("Registration failed. Please try again.")
       setLoading(false)
@@ -150,6 +191,25 @@ export default function RegisterPage() {
             </div>
           </div>
 
+          {formData.role === "therapist" && (
+            <div className="space-y-2">
+              <Label className="text-[hsl(var(--foreground))]">Therapist Certificate (PDF/PNG/JPG)</Label>
+              <Input
+                type="file"
+                accept="application/pdf,image/png,image/jpeg"
+                onChange={(e) => {
+                  const f = e.target.files?.[0] || null
+                  setCertificateFile(f)
+                }}
+                className="bg-white dark:bg-slate-800 border-[hsl(var(--border))]"
+              />
+              {uploading && <p className="text-sm text-[hsl(var(--muted-foreground))]">Uploading certificate...</p>}
+              {certificateUrl && (
+                <p className="text-xs text-[hsl(var(--muted-foreground))] break-all">Uploaded: {certificateUrl}</p>
+              )}
+            </div>
+          )}
+
           <div className="space-y-2">
             <Label htmlFor="password" className="text-[hsl(var(--foreground))]">
               Password
@@ -183,6 +243,7 @@ export default function RegisterPage() {
           </div>
 
           {error && <p className="text-red-500 text-sm">{error}</p>}
+          {success && <p className="text-green-600 text-sm">{success}</p>}
 
           <Button
             type="submit"

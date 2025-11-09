@@ -11,6 +11,7 @@ export default function LoginPage() {
   const [formData, setFormData] = useState({ email: "", password: "" })
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState("")
+  const [success, setSuccess] = useState("")
 
   const handleChange = (e) => {
     const { name, value } = e.target
@@ -21,15 +22,21 @@ export default function LoginPage() {
     e.preventDefault()
     setLoading(true)
     setError("")
+    setSuccess("")
 
     try {
-      // Simulate API call
-      console.log("Login attempt:", formData)
-      // In a real app, this would call your backend API
-      setTimeout(() => {
-        alert("Login functionality would connect to your backend")
-        setLoading(false)
-      }, 1000)
+      const res = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(formData),
+      })
+      const data = await res.json()
+      if (!res.ok) {
+        throw new Error(data.error || "Login failed")
+      }
+      setSuccess("Login successful")
+      // Redirect to dashboard
+      window.location.href = "/dashboard"
     } catch (err) {
       setError("Login failed. Please try again.")
       setLoading(false)
@@ -78,6 +85,7 @@ export default function LoginPage() {
           </div>
 
           {error && <p className="text-red-500 text-sm">{error}</p>}
+          {success && <p className="text-green-600 text-sm">{success}</p>}
 
           <Button
             type="submit"

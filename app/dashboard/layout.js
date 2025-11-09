@@ -1,22 +1,29 @@
-"use client"
+import { cookies } from "next/headers"
+import { redirect } from "next/navigation"
+import { jwtVerify } from "jose"
+import DashboardClientLayout from "@/components/dashboard/layout-client"
 
-import Sidebar from "@/components/dashboard/sidebar"
-import DashboardHeader from "@/components/dashboard/header"
-import { useState } from "react"
+const JWT_SECRET = process.env.JWT_SECRET
 
-export default function DashboardLayout({ children }) {
-  const [sidebarOpen, setSidebarOpen] = useState(false)
+async function verifyToken(token) {
+  try {
+    const { payload } = await jwtVerify(token, new TextEncoder().encode(JWT_SECRET))
+    return payload
+  } catch (e) {
+    return null
+  }
+}
 
-  return (
-    <div className="flex h-screen bg-[hsl(var(--background))]">
-      {/* Sidebar */}
-      <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
+export default async function DashboardLayout({ children }) {
+  const cookieStore = await cookies()
+  const token = cookieStore.get("token")?.value
+  if (!token) {
+    redirect("/login")
+  }
+  const payload = await verifyToken(token)
+  if (!payload) {
+    redirect("/login")
+  }
 
-      {/* Main Content */}
-      <div className="flex-1 flex flex-col overflow-hidden">
-        <DashboardHeader onMenuClick={() => setSidebarOpen(!sidebarOpen)} />
-        <main className="flex-1 overflow-auto">{children}</main>
-      </div>
-    </div>
-  )
+  return <DashboardClientLayout>{children}</DashboardClientLayout>
 }
