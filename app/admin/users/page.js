@@ -1,41 +1,45 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 
 export default function AdminUsersPage() {
-  const [users, setUsers] = useState([
-    {
-      id: 1,
-      name: "Sarah Johnson",
-      email: "sarah@example.com",
-      role: "patient",
-      status: "active",
-      joinDate: "2024-03-15",
-    },
-    {
-      id: 2,
-      name: "Dr. Michael Brown",
-      email: "michael@example.com",
-      role: "therapist",
-      status: "approved",
-      joinDate: "2024-02-10",
-    },
-    { id: 3, name: "John Doe", email: "john@example.com", role: "patient", status: "active", joinDate: "2024-01-20" },
-    {
-      id: 4,
-      name: "Dr. Emma Williams",
-      email: "emma@example.com",
-      role: "therapist",
-      status: "pending",
-      joinDate: "2025-01-08",
-    },
-  ])
+  const [users, setUsers] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState("")
 
   const [searchTerm, setSearchTerm] = useState("")
   const [roleFilter, setRoleFilter] = useState("all")
+
+  async function fetchUsers() {
+    try {
+      setLoading(true)
+      setError("")
+      const res = await fetch("/api/admin/users")
+      if (!res.ok) throw new Error("Failed to load users")
+      const data = await res.json()
+      const list = (data.users || []).map((u) => ({
+        id: u.id,
+        name: u.name || u.email || "Unnamed",
+        email: u.email,
+        role: u.role,
+        status: u.status || (u.role === "therapist" ? "pending" : "active"),
+        createdAt: u.createdAt,
+      }))
+      setUsers(list)
+    } catch (e) {
+      console.error(e)
+      setError("Could not load users")
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    fetchUsers()
+  }, [])
 
   const filteredUsers = users.filter((user) => {
     const matchesSearch =
@@ -45,13 +49,22 @@ export default function AdminUsersPage() {
     return matchesSearch && matchesRole
   })
 
-  const handleApproveTherapist = (userId) => {
-    setUsers(users.map((u) => (u.id === userId ? { ...u, status: "approved" } : u)))
+  const handleApproveTherapist = async (userId) => {
+    try {
+      const res = await fetch(`/api/admin/therapists/${userId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "approve" }),
+      })
+      if (!res.ok) throw new Error("Failed to approve")
+      const updated = await res.json()
+      setUsers((prev) => prev.map((u) => (u.id === userId ? { ...u, status: updated.therapistStatus } : u)))
+    } catch (e) {
+      alert("Unable to approve therapist")
+    }
   }
 
-  const handleDeactivateUser = (userId) => {
-    setUsers(users.map((u) => (u.id === userId ? { ...u, status: "inactive" } : u)))
-  }
+  // Deactivation not implemented in data model; action removed.
 
   const getStatusColor = (status) => {
     const colors = {
@@ -92,7 +105,13 @@ export default function AdminUsersPage() {
 
       {/* Users Table */}
       <Card className="p-6 border border-[hsl(var(--border))] overflow-x-auto">
-        <table className="w-full text-sm">
+        {error && (
+          <p className="text-sm text-red-600 mb-4">{error}</p>
+        )}
+        {loading ? (
+          <p className="text-sm text-[hsl(var(--muted-foreground))]">Loading users...</p>
+        ) : (
+          <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-[hsl(var(--border))]">
               <th className="text-left py-3 px-4 font-semibold">Name</th>
@@ -104,7 +123,14 @@ export default function AdminUsersPage() {
             </tr>
           </thead>
           <tbody>
-            {filteredUsers.map((user) => (
+            {filteredUsers.length === 0 ? (
+              <tr>
+                <td colSpan={6} className="py-6 text-center text-[hsl(var(--muted-foreground))]">
+                  No users found.
+                </td>
+              </tr>
+            ) : (
+              filteredUsers.map((user) => (
               <tr key={user.id} className="border-b border-[hsl(var(--border))] hover:bg-[hsl(var(--muted))]">
                 <td className="py-3 px-4 font-semibold">{user.name}</td>
                 <td className="py-3 px-4">{user.email}</td>
@@ -114,7 +140,9 @@ export default function AdminUsersPage() {
                     {user.status}
                   </span>
                 </td>
-                <td className="py-3 px-4 text-[hsl(var(--muted-foreground))]">{user.joinDate}</td>
+                <td className="py-3 px-4 text-[hsl(var(--muted-foreground))]">
+                  {user.createdAt ? new Date(user.createdAt).toISOString().slice(0, 10) : "-"}
+                </td>
                 <td className="py-3 px-4">
                   <div className="flex gap-2">
                     {user.role === "therapist" && user.status === "pending" && (
@@ -126,20 +154,14 @@ export default function AdminUsersPage() {
                         Approve
                       </Button>
                     )}
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="border-red-200 text-red-600 hover:bg-red-50 dark:border-red-900 dark:hover:bg-red-900/20 bg-transparent"
-                      onClick={() => handleDeactivateUser(user.id)}
-                    >
-                      Deactivate
-                    </Button>
                   </div>
                 </td>
               </tr>
-            ))}
+              ))
+            )}
           </tbody>
-        </table>
+          </table>
+        )}
       </Card>
     </div>
   )

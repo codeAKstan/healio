@@ -1,48 +1,83 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 
 export default function AdminTherapistsPage() {
-  const [therapists, setTherapists] = useState([
-    {
-      id: 1,
-      name: "Dr. Sarah Mitchell",
-      specialization: "Anxiety & Stress",
-      licenseNumber: "LIC-2024-001",
-      status: "approved",
-      patients: 12,
-      avatar: "SM",
-    },
-    {
-      id: 2,
-      name: "Dr. Michael Brown",
-      specialization: "Depression & Trauma",
-      licenseNumber: "LIC-2024-002",
-      status: "approved",
-      patients: 8,
-      avatar: "MB",
-    },
-    {
-      id: 3,
-      name: "Dr. Emma Williams",
-      specialization: "Life Transitions",
-      licenseNumber: "LIC-2025-003",
-      status: "pending",
-      patients: 0,
-      avatar: "EW",
-    },
-  ])
+  const [therapists, setTherapists] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState("")
 
   const [selectedTherapist, setSelectedTherapist] = useState(null)
 
-  const handleApprove = (id) => {
-    setTherapists(therapists.map((t) => (t.id === id ? { ...t, status: "approved" } : t)))
+  async function fetchTherapists() {
+    try {
+      setLoading(true)
+      setError("")
+      const res = await fetch("/api/admin/therapists")
+      if (!res.ok) throw new Error("Failed to load therapists")
+      const data = await res.json()
+      const list = (data.therapists || []).map((t) => ({
+        id: t.id,
+        name: t.name || t.email || "Unnamed",
+        email: t.email,
+        status: t.therapistStatus || "pending",
+        certificateUrl: t.certificateUrl || "",
+        createdAt: t.createdAt,
+        avatar: (t.name || t.email || "U")
+          .split(/\s+/)
+          .slice(0, 2)
+          .map((p) => p[0]?.toUpperCase())
+          .join("") || "U",
+      }))
+      setTherapists(list)
+    } catch (e) {
+      console.error(e)
+      setError("Could not load therapists")
+    } finally {
+      setLoading(false)
+    }
   }
 
-  const handleReject = (id) => {
-    setTherapists(therapists.filter((t) => t.id !== id))
+  useEffect(() => {
+    fetchTherapists()
+  }, [])
+
+  const handleApprove = async (id) => {
+    try {
+      const res = await fetch(`/api/admin/therapists/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "approve" }),
+      })
+      if (!res.ok) throw new Error("Failed to approve")
+      const updated = await res.json()
+      setTherapists((prev) => prev.map((t) => (t.id === id ? { ...t, status: updated.therapistStatus } : t)))
+      if (selectedTherapist?.id === id) {
+        setSelectedTherapist((prev) => ({ ...prev, status: updated.therapistStatus }))
+      }
+    } catch (e) {
+      alert("Unable to approve therapist")
+    }
+  }
+
+  const handleReject = async (id) => {
+    try {
+      const res = await fetch(`/api/admin/therapists/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "reject" }),
+      })
+      if (!res.ok) throw new Error("Failed to reject")
+      const updated = await res.json()
+      setTherapists((prev) => prev.map((t) => (t.id === id ? { ...t, status: updated.therapistStatus } : t)))
+      if (selectedTherapist?.id === id) {
+        setSelectedTherapist((prev) => ({ ...prev, status: updated.therapistStatus }))
+      }
+    } catch (e) {
+      alert("Unable to reject therapist")
+    }
   }
 
   const getStatusColor = (status) => {
@@ -64,7 +99,22 @@ export default function AdminTherapistsPage() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Therapist List */}
         <div className="lg:col-span-2 space-y-4">
-          {therapists.map((therapist) => (
+          {error && (
+            <Card className="p-4 border border-[hsl(var(--border))]">
+              <p className="text-sm text-red-600">{error}</p>
+            </Card>
+          )}
+          {loading && (
+            <Card className="p-4 border border-[hsl(var(--border))]">
+              <p className="text-sm text-[hsl(var(--muted-foreground))]">Loading therapists...</p>
+            </Card>
+          )}
+          {!loading && therapists.length === 0 && (
+            <Card className="p-12 text-center border border-[hsl(var(--border))]">
+              <p className="text-[hsl(var(--muted-foreground))]">No therapists found.</p>
+            </Card>
+          )}
+          {!loading && therapists.map((therapist) => (
             <Card
               key={therapist.id}
               className="p-6 border border-[hsl(var(--border))] cursor-pointer hover:shadow-lg transition"
@@ -83,10 +133,23 @@ export default function AdminTherapistsPage() {
                       {therapist.status}
                     </span>
                   </div>
-                  <p className="text-[hsl(var(--muted-foreground))] text-sm mb-2">{therapist.specialization}</p>
+                  <div className="text-[hsl(var(--muted-foreground))] text-sm mb-2">
+                    {therapist.email}
+                  </div>
                   <div className="flex gap-6 text-sm">
-                    <span>License: {therapist.licenseNumber}</span>
-                    <span>{therapist.patients} patients</span>
+                    {therapist.certificateUrl && (
+                      <a
+                        href={therapist.certificateUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-[hsl(var(--primary))] hover:underline"
+                      >
+                        View Certificate
+                      </a>
+                    )}
+                    <span>
+                      Joined: {therapist.createdAt ? new Date(therapist.createdAt).toISOString().slice(0, 10) : "-"}
+                    </span>
                   </div>
                 </div>
               </div>
@@ -95,18 +158,18 @@ export default function AdminTherapistsPage() {
                 <div className="flex gap-2 mt-4">
                   <Button
                     className="flex-1 bg-green-600 hover:bg-green-700 text-white"
-                    onClick={(e) => {
+                    onClick={async (e) => {
                       e.stopPropagation()
-                      handleApprove(therapist.id)
+                      await handleApprove(therapist.id)
                     }}
                   >
                     Approve
                   </Button>
                   <Button
                     className="flex-1 bg-red-600 hover:bg-red-700 text-white"
-                    onClick={(e) => {
+                    onClick={async (e) => {
                       e.stopPropagation()
-                      handleReject(therapist.id)
+                      await handleReject(therapist.id)
                     }}
                   >
                     Reject
@@ -125,21 +188,34 @@ export default function AdminTherapistsPage() {
                 {selectedTherapist.avatar}
               </div>
               <h3 className="text-lg font-bold">{selectedTherapist.name}</h3>
-              <p className="text-[hsl(var(--muted-foreground))] text-sm">{selectedTherapist.specialization}</p>
+              <p className="text-[hsl(var(--muted-foreground))] text-sm">{selectedTherapist.email}</p>
             </div>
 
             <div className="space-y-3 mb-6">
               <div>
-                <p className="text-xs text-[hsl(var(--muted-foreground))]">License Number</p>
-                <p className="font-semibold">{selectedTherapist.licenseNumber}</p>
-              </div>
-              <div>
                 <p className="text-xs text-[hsl(var(--muted-foreground))]">Status</p>
                 <p className="font-semibold capitalize">{selectedTherapist.status}</p>
               </div>
+              {selectedTherapist.certificateUrl && (
+                <div>
+                  <p className="text-xs text-[hsl(var(--muted-foreground))]">Certificate</p>
+                  <a
+                    href={selectedTherapist.certificateUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-[hsl(var(--primary))] hover:underline"
+                  >
+                    View Certificate
+                  </a>
+                </div>
+              )}
               <div>
-                <p className="text-xs text-[hsl(var(--muted-foreground))]">Active Patients</p>
-                <p className="font-semibold">{selectedTherapist.patients}</p>
+                <p className="text-xs text-[hsl(var(--muted-foreground))]">Joined</p>
+                <p className="font-semibold">
+                  {selectedTherapist.createdAt
+                    ? new Date(selectedTherapist.createdAt).toISOString().slice(0, 10)
+                    : "-"}
+                </p>
               </div>
             </div>
 
