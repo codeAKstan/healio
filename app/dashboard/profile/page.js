@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -8,16 +8,44 @@ import { Label } from "@/components/ui/label"
 
 export default function ProfilePage() {
   const [isEditing, setIsEditing] = useState(false)
-  const [profileData, setProfileData] = useState({
-    name: "Sarah Johnson",
-    email: "sarah@example.com",
-    age: "28",
-    gender: "Female",
-    role: "Patient",
-    joinDate: "2024-03-15",
-  })
+  const [profileData, setProfileData] = useState(null)
 
-  const [editData, setEditData] = useState(profileData)
+  const [editData, setEditData] = useState(null)
+
+  useEffect(() => {
+    let active = true
+    ;(async () => {
+      try {
+        const res = await fetch("/api/auth/me")
+        if (!res.ok) throw new Error("Failed to load user")
+        const data = await res.json()
+        if (active) {
+          const joinDate = data.createdAt
+            ? new Date(data.createdAt).toISOString().slice(0, 10)
+            : "—"
+          setProfileData({
+            name: data.name || data.email || "User",
+            email: data.email,
+            age: data.age ?? "—",
+            gender: data.gender || "—",
+            role: data.role || "—",
+            joinDate,
+          })
+          setEditData({
+            name: data.name || "",
+            email: data.email || "",
+            age: data.age ?? "",
+            gender: data.gender || "Other",
+          })
+        }
+      } catch (e) {
+        // If unauthenticated, dashboard layout/middleware should redirect
+      }
+    })()
+    return () => {
+      active = false
+    }
+  }, [])
 
   const handleSaveProfile = () => {
     setProfileData(editData)
@@ -37,11 +65,15 @@ export default function ProfilePage() {
         <div className="lg:col-span-1">
           <Card className="p-6 border border-[hsl(var(--border))] text-center">
             <div className="w-20 h-20 mx-auto mb-4 bg-gradient-to-br from-blue-400 to-indigo-600 rounded-full flex items-center justify-center text-white text-2xl font-bold">
-              SJ
+              {(profileData?.name || "U").slice(0, 2).toUpperCase()}
             </div>
-            <h2 className="text-2xl font-bold mb-1">{profileData.name}</h2>
-            <p className="text-[hsl(var(--muted-foreground))] mb-4">{profileData.role}</p>
-            <p className="text-sm text-[hsl(var(--muted-foreground))] mb-6">Member since {profileData.joinDate}</p>
+            <h2 className="text-2xl font-bold mb-1">{profileData?.name || "Loading..."}</h2>
+            {profileData?.role && (
+              <p className="text-[hsl(var(--muted-foreground))] mb-4">{profileData.role}</p>
+            )}
+            {profileData?.joinDate && (
+              <p className="text-sm text-[hsl(var(--muted-foreground))] mb-6">Member since {profileData.joinDate}</p>
+            )}
             <Button
               onClick={() => {
                 setIsEditing(!isEditing)
@@ -62,16 +94,16 @@ export default function ProfilePage() {
             {!isEditing ? (
               <div className="space-y-4">
                 {[
-                  { label: "Full Name", value: profileData.name },
-                  { label: "Email", value: profileData.email },
-                  { label: "Age", value: profileData.age },
-                  { label: "Gender", value: profileData.gender },
-                  { label: "Account Role", value: profileData.role },
-                  { label: "Member Since", value: profileData.joinDate },
+                  { label: "Full Name", value: profileData?.name },
+                  { label: "Email", value: profileData?.email },
+                  { label: "Age", value: profileData?.age },
+                  { label: "Gender", value: profileData?.gender },
+                  { label: "Account Role", value: profileData?.role },
+                  { label: "Member Since", value: profileData?.joinDate },
                 ].map((field, idx) => (
                   <div key={idx} className="flex justify-between items-center p-3 bg-[hsl(var(--muted))] rounded-lg">
                     <span className="text-[hsl(var(--muted-foreground))]">{field.label}</span>
-                    <span className="font-semibold">{field.value}</span>
+                    <span className="font-semibold">{field.value || "—"}</span>
                   </div>
                 ))}
               </div>
@@ -80,7 +112,7 @@ export default function ProfilePage() {
                 <div>
                   <Label className="text-[hsl(var(--foreground))]">Full Name</Label>
                   <Input
-                    value={editData.name}
+                    value={editData?.name || ""}
                     onChange={(e) => setEditData({ ...editData, name: e.target.value })}
                     className="mt-1 bg-white dark:bg-slate-800 border-[hsl(var(--border))]"
                   />
@@ -90,7 +122,7 @@ export default function ProfilePage() {
                   <Label className="text-[hsl(var(--foreground))]">Email</Label>
                   <Input
                     type="email"
-                    value={editData.email}
+                    value={editData?.email || ""}
                     onChange={(e) => setEditData({ ...editData, email: e.target.value })}
                     className="mt-1 bg-white dark:bg-slate-800 border-[hsl(var(--border))]"
                   />
@@ -101,7 +133,7 @@ export default function ProfilePage() {
                     <Label className="text-[hsl(var(--foreground))]">Age</Label>
                     <Input
                       type="number"
-                      value={editData.age}
+                      value={editData?.age ?? ""}
                       onChange={(e) => setEditData({ ...editData, age: e.target.value })}
                       className="mt-1 bg-white dark:bg-slate-800 border-[hsl(var(--border))]"
                     />
@@ -109,7 +141,7 @@ export default function ProfilePage() {
                   <div>
                     <Label className="text-[hsl(var(--foreground))]">Gender</Label>
                     <select
-                      value={editData.gender}
+                      value={editData?.gender || "Other"}
                       onChange={(e) => setEditData({ ...editData, gender: e.target.value })}
                       className="w-full mt-1 p-2 rounded-lg bg-white dark:bg-slate-800 border border-[hsl(var(--border))]"
                     >

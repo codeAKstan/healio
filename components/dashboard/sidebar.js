@@ -6,6 +6,15 @@ import { Button } from "@/components/ui/button"
 
 export default function Sidebar({ isOpen, onClose }) {
   const pathname = usePathname()
+  const handleLogout = async () => {
+    try {
+      const res = await fetch("/api/auth/logout", { method: "POST" })
+      // Regardless of response, redirect to login
+      window.location.href = "/login"
+    } catch (e) {
+      window.location.href = "/login"
+    }
+  }
 
   const navItems = [
     { href: "/dashboard", icon: "📊", label: "Dashboard" },
@@ -60,6 +69,7 @@ export default function Sidebar({ isOpen, onClose }) {
           <Button
             variant="outline"
             className="w-full border-[hsl(var(--border))] text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 bg-transparent"
+            onClick={handleLogout}
           >
             Logout
           </Button>
