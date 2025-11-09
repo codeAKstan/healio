@@ -1,7 +1,30 @@
 "use client"
 import Link from "next/link"
+import { useEffect, useState } from "react"
 
 export default function DashboardHeader({ onMenuClick }) {
+  const [initials, setInitials] = useState("?")
+
+  useEffect(() => {
+    let active = true
+    ;(async () => {
+      try {
+        const res = await fetch("/api/auth/me")
+        if (!res.ok) return
+        const data = await res.json()
+        const name = data?.name || data?.email || "User"
+        const parts = String(name).trim().split(/\s+/)
+        const computed = (parts[0]?.[0] || "").toUpperCase() + (parts[1]?.[0] || "").toUpperCase()
+        if (active) setInitials(computed || (String(name)[0] || "?").toUpperCase())
+      } catch (e) {
+        // noop
+      }
+    })()
+    return () => {
+      active = false
+    }
+  }, [])
+
   return (
     <header className="bg-white dark:bg-slate-900 border-b border-[hsl(var(--border))] sticky top-0 z-40">
       <div className="flex items-center justify-between h-16 px-6">
@@ -30,7 +53,7 @@ export default function DashboardHeader({ onMenuClick }) {
           {/* Profile Avatar */}
           <Link href="/dashboard/profile">
             <div className="w-10 h-10 bg-gradient-to-br from-blue-400 to-indigo-600 rounded-full flex items-center justify-center text-white font-bold cursor-pointer hover:shadow-lg transition">
-              SJ
+              {initials}
             </div>
           </Link>
         </div>

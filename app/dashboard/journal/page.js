@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
@@ -8,32 +8,9 @@ import { Input } from "@/components/ui/input"
 import JournalList from "@/components/journal/journal-list"
 
 export default function JournalPage() {
-  const [entries, setEntries] = useState([
-    {
-      id: 1,
-      title: "A Great Day",
-      date: "2025-01-08",
-      content:
-        "Today was amazing! I had a successful meeting and my team appreciated my ideas. I feel more confident about my abilities.",
-      mood: "happy",
-    },
-    {
-      id: 2,
-      title: "Reflecting on Changes",
-      date: "2025-01-07",
-      content:
-        "I realized that small changes in my daily routine have made a big difference. Morning walks really help clear my mind.",
-      mood: "neutral",
-    },
-    {
-      id: 3,
-      title: "Dealing with Stress",
-      date: "2025-01-06",
-      content:
-        "Work has been stressful lately. I need to remember to take breaks and practice the breathing exercises my therapist taught me.",
-      mood: "anxious",
-    },
-  ])
+  const [entries, setEntries] = useState([])
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState("")
 
   const [isEditing, setIsEditing] = useState(false)
   const [editingId, setEditingId] = useState(null)
@@ -58,38 +35,84 @@ export default function JournalPage() {
     setMood("neutral")
   }
 
-  const handleSave = () => {
+  async function fetchEntries() {
+    try {
+      setLoading(true)
+      setError("")
+      const res = await fetch("/api/journal")
+      if (!res.ok) throw new Error("Failed to load journals")
+      const data = await res.json()
+      const mapped = (data.journals || []).map((j) => ({
+        id: j.id,
+        title: j.title,
+        content: j.content,
+        mood: j.mood,
+        date: new Date(j.createdAt).toISOString().split("T")[0],
+      }))
+      setEntries(mapped)
+    } catch (e) {
+      console.error(e)
+      setError("Could not load journal entries")
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    fetchEntries()
+  }, [])
+
+  const handleSave = async () => {
     if (!title.trim() || !content.trim()) {
       alert("Please fill in both title and content")
       return
     }
 
-    if (editingId) {
-      setEntries(
-        entries.map((e) =>
-          e.id === editingId ? { ...e, title, content, mood, date: new Date().toISOString().split("T")[0] } : e,
-        ),
-      )
-    } else {
-      const newEntry = {
-        id: Math.max(...entries.map((e) => e.id), 0) + 1,
-        title,
-        content,
-        mood,
-        date: new Date().toISOString().split("T")[0],
+    try {
+      setLoading(true)
+      setError("")
+      if (editingId) {
+        const res = await fetch(`/api/journal/${editingId}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ title, content, mood }),
+        })
+        if (!res.ok) throw new Error("Failed to update entry")
+      } else {
+        const res = await fetch("/api/journal", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ title, content, mood }),
+        })
+        if (!res.ok) throw new Error("Failed to create entry")
       }
-      setEntries([newEntry, ...entries])
+      await fetchEntries()
+      setIsEditing(false)
+      setTitle("")
+      setContent("")
+      setMood("neutral")
+      alert("Journal entry saved!")
+    } catch (e) {
+      console.error(e)
+      setError("Could not save entry")
+    } finally {
+      setLoading(false)
     }
-
-    setIsEditing(false)
-    setTitle("")
-    setContent("")
-    setMood("neutral")
-    alert("Journal entry saved!")
   }
 
-  const handleDelete = (id) => {
-    setEntries(entries.filter((e) => e.id !== id))
+  const handleDelete = async (id) => {
+    try {
+      setLoading(true)
+      setError("")
+      const res = await fetch(`/api/journal/${id}`, { method: "DELETE" })
+      if (!res.ok) throw new Error("Failed to delete entry")
+      await fetchEntries()
+    } catch (e) {
+      console.error(e)
+      setError("Could not delete entry")
+    } finally {
+      setLoading(false)
+    }
   }
 
   const handleEdit = (entry) => {
@@ -195,7 +218,19 @@ export default function JournalPage() {
               />
             </Card>
           ) : (
-            <JournalList entries={entries} onEdit={handleEdit} onDelete={handleDelete} />
+            <>
+              {error && (
+                <Card className="p-4 mb-4 border border-[hsl(var(--border))]">
+                  <p className="text-sm text-red-600">{error}</p>
+                </Card>
+              )}
+              <JournalList entries={entries} onEdit={handleEdit} onDelete={handleDelete} />
+              {loading && (
+                <Card className="p-4 mt-4 border border-[hsl(var(--border))]">
+                  <p className="text-sm text-[hsl(var(--muted-foreground))]">Loading...</p>
+                </Card>
+              )}
+            </>
           )}
         </div>
       </div>

@@ -8,6 +8,8 @@ import { useEffect, useState } from "react"
 export default function DashboardPage() {
   const [userData, setUserData] = useState(null)
   const [loadingUser, setLoadingUser] = useState(true)
+  const [moods, setMoods] = useState([])
+  const [loadingMoods, setLoadingMoods] = useState(true)
 
   useEffect(() => {
     let active = true
@@ -30,19 +32,44 @@ export default function DashboardPage() {
     }
   }, [])
 
+  useEffect(() => {
+    let active = true
+    ;(async () => {
+      try {
+        const res = await fetch("/api/mood")
+        if (!res.ok) throw new Error("Failed to load moods")
+        const json = await res.json()
+        const list = (json.moods || []).map((m) => ({
+          date: new Date(m.createdAt).toISOString().split("T")[0],
+          mood: m.mood,
+          intensity: m.intensity,
+          notes: m.notes,
+        }))
+        if (active) setMoods(list)
+      } catch (e) {
+        // noop
+      } finally {
+        if (active) setLoadingMoods(false)
+      }
+    })()
+    return () => {
+      active = false
+    }
+  }, [])
+
   const moodStats = {
-    happy: 15,
-    sad: 3,
-    anxious: 8,
-    angry: 2,
-    neutral: 7,
+    happy: moods.filter((m) => m.mood === "happy").length,
+    sad: moods.filter((m) => m.mood === "sad").length,
+    anxious: moods.filter((m) => m.mood === "anxious").length,
+    angry: moods.filter((m) => m.mood === "angry").length,
+    neutral: moods.filter((m) => m.mood === "neutral").length,
   }
 
-  const recentEntries = [
-    { date: "Today", mood: "Happy", entry: "Had a great day at work!" },
-    { date: "Yesterday", mood: "Neutral", entry: "Regular day, nothing special" },
-    { date: "2 days ago", mood: "Anxious", entry: "Worried about upcoming meeting" },
-  ]
+  const recentEntries = moods.slice(0, 3).map((m) => ({
+    date: m.date,
+    mood: m.mood.charAt(0).toUpperCase() + m.mood.slice(1),
+    entry: m.notes || "No notes",
+  }))
 
   return (
     <div className="p-6 md:p-8 space-y-8">
@@ -88,7 +115,17 @@ export default function DashboardPage() {
               </Link>
             </div>
             <div className="space-y-4">
-              {recentEntries.map((entry, idx) => (
+              {loadingMoods && (
+                <div className="p-4 rounded-lg bg-[hsl(var(--muted))]">
+                  <p className="text-sm text-[hsl(var(--muted-foreground))]">Loading recent moods...</p>
+                </div>
+              )}
+              {!loadingMoods && recentEntries.length === 0 && (
+                <div className="p-4 rounded-lg bg-[hsl(var(--muted))]">
+                  <p className="text-sm text-[hsl(var(--muted-foreground))]">No mood entries yet.</p>
+                </div>
+              )}
+              {!loadingMoods && recentEntries.map((entry, idx) => (
                 <div key={idx} className="p-4 rounded-lg bg-[hsl(var(--muted))] hover:bg-opacity-80 transition">
                   <div className="flex justify-between items-start">
                     <div>
