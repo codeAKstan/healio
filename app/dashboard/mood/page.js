@@ -1,19 +1,14 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
 import MoodChart from "@/components/mood/mood-chart"
 
 export default function MoodTrackerPage() {
-  const [moods, setMoods] = useState([
-    { date: "2025-01-08", mood: "happy", intensity: 8, notes: "Had a great day!" },
-    { date: "2025-01-07", mood: "anxious", intensity: 6, notes: "Worried about work" },
-    { date: "2025-01-06", mood: "neutral", intensity: 5, notes: "Regular day" },
-    { date: "2025-01-05", mood: "happy", intensity: 9, notes: "Vacation day!" },
-    { date: "2025-01-04", mood: "sad", intensity: 4, notes: "Missing someone" },
-  ])
+  const [moods, setMoods] = useState([])
+  const [loading, setLoading] = useState(true)
 
   const [selectedMood, setSelectedMood] = useState(null)
   const [intensity, setIntensity] = useState(5)
@@ -27,22 +22,55 @@ export default function MoodTrackerPage() {
     { value: "neutral", label: "Neutral", color: "bg-gray-100 dark:bg-gray-900/30 text-gray-600" },
   ]
 
-  const handleLogMood = () => {
+  const handleLogMood = async () => {
     if (!selectedMood) return
-
-    const newMood = {
-      date: new Date().toISOString().split("T")[0],
-      mood: selectedMood,
-      intensity,
-      notes,
+    try {
+      const res = await fetch("/api/mood", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ mood: selectedMood, intensity, notes }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || "Failed to log mood")
+      const entry = {
+        date: new Date(data.createdAt).toISOString().split("T")[0],
+        mood: data.mood,
+        intensity: data.intensity,
+        notes: data.notes,
+      }
+      setMoods((prev) => [entry, ...prev])
+      setSelectedMood(null)
+      setIntensity(5)
+      setNotes("")
+    } catch (e) {
+      alert("Unable to log mood. Please try again.")
     }
-
-    setMoods([newMood, ...moods])
-    setSelectedMood(null)
-    setIntensity(5)
-    setNotes("")
-    alert("Mood logged successfully!")
   }
+
+  useEffect(() => {
+    let active = true
+    ;(async () => {
+      try {
+        const res = await fetch("/api/mood")
+        if (!res.ok) throw new Error("Failed to load moods")
+        const json = await res.json()
+        const list = (json.moods || []).map((m) => ({
+          date: new Date(m.createdAt).toISOString().split("T")[0],
+          mood: m.mood,
+          intensity: m.intensity,
+          notes: m.notes,
+        }))
+        if (active) setMoods(list)
+      } catch (e) {
+        // noop
+      } finally {
+        if (active) setLoading(false)
+      }
+    })()
+    return () => {
+      active = false
+    }
+  }, [])
 
   return (
     <div className="p-6 md:p-8 space-y-8">
