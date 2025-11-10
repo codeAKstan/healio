@@ -11,6 +11,8 @@ export default function ProfilePage() {
   const [profileData, setProfileData] = useState(null)
 
   const [editData, setEditData] = useState(null)
+  const [saving, setSaving] = useState(false)
+  const [saveMessage, setSaveMessage] = useState("")
 
   useEffect(() => {
     let active = true
@@ -47,10 +49,41 @@ export default function ProfilePage() {
     }
   }, [])
 
-  const handleSaveProfile = () => {
-    setProfileData(editData)
-    setIsEditing(false)
-    alert("Profile updated successfully!")
+  const handleSaveProfile = async () => {
+    try {
+      setSaving(true)
+      setSaveMessage("")
+      const res = await fetch("/api/auth/me", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: editData?.name,
+          email: undefined, // email not updatable here
+          age: editData?.age,
+          gender: editData?.gender,
+        }),
+      })
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}))
+        throw new Error(data.error || "Failed to save profile")
+      }
+      const updated = await res.json()
+      setProfileData({
+        name: updated.name || profileData?.name,
+        email: updated.email || profileData?.email,
+        age: updated.age ?? profileData?.age,
+        gender: updated.gender || profileData?.gender,
+        role: updated.role || profileData?.role,
+        joinDate: updated.createdAt ? new Date(updated.createdAt).toISOString().slice(0,10) : profileData?.joinDate,
+      })
+      setIsEditing(false)
+      setSaveMessage("Profile updated successfully.")
+    } catch (e) {
+      console.error(e)
+      setSaveMessage(e.message || "Could not save profile.")
+    } finally {
+      setSaving(false)
+    }
   }
 
   return (
@@ -90,6 +123,9 @@ export default function ProfilePage() {
         <div className="lg:col-span-2 space-y-6">
           <Card className="p-6 border border-[hsl(var(--border))]">
             <h2 className="text-xl font-bold mb-6">Personal Information</h2>
+            {saveMessage && (
+              <div className="mb-4 p-3 rounded bg-[hsl(var(--muted))] text-sm">{saveMessage}</div>
+            )}
 
             {!isEditing ? (
               <div className="space-y-4">
@@ -154,9 +190,10 @@ export default function ProfilePage() {
 
                 <Button
                   onClick={handleSaveProfile}
+                  disabled={saving}
                   className="w-full bg-[hsl(var(--primary))] hover:bg-blue-600 text-white"
                 >
-                  Save Changes
+                  {saving ? "Saving..." : "Save Changes"}
                 </Button>
               </div>
             )}

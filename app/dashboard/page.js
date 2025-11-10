@@ -10,6 +10,9 @@ export default function DashboardPage() {
   const [loadingUser, setLoadingUser] = useState(true)
   const [moods, setMoods] = useState([])
   const [loadingMoods, setLoadingMoods] = useState(true)
+  const [appointments, setAppointments] = useState([])
+  const [loadingAppts, setLoadingAppts] = useState(true)
+  const [unreadCount, setUnreadCount] = useState(0)
 
   useEffect(() => {
     let active = true
@@ -57,6 +60,35 @@ export default function DashboardPage() {
     }
   }, [])
 
+  useEffect(() => {
+    if (userData?.role !== "therapist") return
+    let active = true
+    ;(async () => {
+      try {
+        setLoadingAppts(true)
+        const [apRes, notifRes] = await Promise.all([
+          fetch("/api/appointments"),
+          fetch("/api/notifications?unread=true&count=true"),
+        ])
+        if (apRes.ok) {
+          const apJson = await apRes.json()
+          const appts = Array.isArray(apJson.appointments) ? apJson.appointments : []
+          if (active) setAppointments(appts)
+        }
+        if (notifRes.ok) {
+          const nJson = await notifRes.json()
+          const cnt = typeof nJson.unreadCount === "number" ? nJson.unreadCount : 0
+          if (active) setUnreadCount(cnt)
+        }
+      } catch (e) {
+        // noop
+      } finally {
+        if (active) setLoadingAppts(false)
+      }
+    })()
+    return () => { active = false }
+  }, [userData])
+
   const moodStats = {
     happy: moods.filter((m) => m.mood === "happy").length,
     sad: moods.filter((m) => m.mood === "sad").length,
@@ -93,12 +125,30 @@ export default function DashboardPage() {
         <>
           {/* Therapist Stats */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-            {[
-              { label: "Upcoming Sessions", value: 3, color: "bg-indigo-100 dark:bg-indigo-900/30" },
-              { label: "Pending Requests", value: 2, color: "bg-yellow-100 dark:bg-yellow-900/30" },
-              { label: "Active Clients", value: 8, color: "bg-green-100 dark:bg-green-900/30" },
-              { label: "New Messages", value: 1, color: "bg-blue-100 dark:bg-blue-900/30" },
-            ].map((stat) => (
+            {(() => {
+              const today = new Date().toISOString().slice(0,10)
+              const upcomingSessions = appointments.filter(a => a.status !== "canceled" && a.date >= today).length
+              const pendingRequests = appointments.filter(a => a.status === "pending").length
+              const byPatient = new Map()
+              const toDate = (s) => new Date(`${s}T00:00:00`)
+              const now = new Date()
+              appointments.forEach(a => {
+                const pid = a.patientId
+                const d = toDate(a.date)
+                const rec = byPatient.get(pid) || { last: null, upcoming: false }
+                if (!rec.last || (d && d > rec.last)) rec.last = d
+                if (d && d >= now) rec.upcoming = true
+                byPatient.set(pid, rec)
+              })
+              const activeClients = Array.from(byPatient.values()).filter(p => p.upcoming || (p.last && (now - p.last) / (1000*60*60*24) <= 30)).length
+              const stats = [
+                { label: "Upcoming Sessions", value: upcomingSessions, color: "bg-indigo-100 dark:bg-indigo-900/30" },
+                { label: "Pending Requests", value: pendingRequests, color: "bg-yellow-100 dark:bg-yellow-900/30" },
+                { label: "Active Clients", value: activeClients, color: "bg-green-100 dark:bg-green-900/30" },
+                { label: "New Messages", value: unreadCount, color: "bg-blue-100 dark:bg-blue-900/30" },
+              ]
+              return stats
+            })().map((stat) => (
               <Card key={stat.label} className={`p-4 border-none ${stat.color}`}>
                 <div className="text-sm text-[hsl(var(--muted-foreground))] mb-1">{stat.label}</div>
                 <div className="text-2xl font-bold">{stat.value}</div>
@@ -116,15 +166,24 @@ export default function DashboardPage() {
                   </Link>
                 </div>
                 <div className="space-y-3">
-                  {[{ time: "10:00", client: "Alex Johnson", type: "Video" }, { time: "14:30", client: "Priya Singh", type: "In-Person" }].map((s, idx) => (
-                    <div key={idx} className="p-4 rounded-lg bg-[hsl(var(--muted))] flex items-center justify-between">
-                      <div>
-                        <p className="font-semibold">{s.client}</p>
-                        <p className="text-sm text-[hsl(var(--muted-foreground))]">{s.type} session</p>
+                  {loadingAppts && (
+                    <div className="p-4 rounded-lg bg-[hsl(var(--muted))]">Loading schedule...</div>
+                  )}
+                  {!loadingAppts && appointments.filter(a => a.date === new Date().toISOString().slice(0,10) && a.status !== "canceled").length === 0 && (
+                    <div className="p-4 rounded-lg bg-[hsl(var(--muted))]">No sessions today.</div>
+                  )}
+                  {!loadingAppts && appointments
+                    .filter(a => a.date === new Date().toISOString().slice(0,10) && a.status !== "canceled")
+                    .sort((a,b) => (a.time || "").localeCompare(b.time || ""))
+                    .map((a) => (
+                      <div key={a._id} className="p-4 rounded-lg bg-[hsl(var(--muted))] flex items-center justify-between">
+                        <div>
+                          <p className="font-semibold">{a.patientName || "Patient"}</p>
+                          <p className="text-sm text-[hsl(var(--muted-foreground))]">{a.mode === "in_person" ? "In-Person" : "Video"} session</p>
+                        </div>
+                        <span className="text-sm font-semibold bg-[hsl(var(--primary))]/10 text-[hsl(var(--primary))] px-3 py-1 rounded">{a.time}</span>
                       </div>
-                      <span className="text-sm font-semibold bg-[hsl(var(--primary))]/10 text-[hsl(var(--primary))] px-3 py-1 rounded">{s.time}</span>
-                    </div>
-                  ))}
+                    ))}
                 </div>
               </Card>
             </div>
