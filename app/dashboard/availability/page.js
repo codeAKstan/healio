@@ -6,10 +6,9 @@ import { Button } from "@/components/ui/button"
 
 export default function AvailabilityPage() {
   const [role, setRole] = useState(null)
-  const [slots, setSlots] = useState([
-    { id: 1, day: "Monday", from: "09:00", to: "12:00" },
-    { id: 2, day: "Wednesday", from: "13:00", to: "16:00" },
-  ])
+  const [slots, setSlots] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState("")
   const [newSlot, setNewSlot] = useState({ day: "Monday", from: "09:00", to: "10:00" })
 
   useEffect(() => {
@@ -25,6 +24,28 @@ export default function AvailabilityPage() {
     return () => { active = false }
   }, [])
 
+  useEffect(() => {
+    if (role !== "therapist") return
+    let active = true
+    ;(async () => {
+      try {
+        setLoading(true)
+        setError("")
+        const res = await fetch("/api/availability")
+        if (!res.ok) throw new Error("Failed to load availability")
+        const data = await res.json()
+        const list = (data.slots || []).map((s) => ({ id: s.id, day: s.day, from: s.from, to: s.to }))
+        if (active) setSlots(list)
+      } catch (e) {
+        console.error(e)
+        if (active) setError("Could not load availability")
+      } finally {
+        if (active) setLoading(false)
+      }
+    })()
+    return () => { active = false }
+  }, [role])
+
   if (role && role !== "therapist") {
     return (
       <div className="p-6 md:p-8">
@@ -36,13 +57,47 @@ export default function AvailabilityPage() {
     )
   }
 
-  const addSlot = () => {
-    const id = Math.max(0, ...slots.map(s => s.id)) + 1
-    setSlots([...slots, { id, ...newSlot }])
+  const addSlot = async () => {
+    try {
+      setError("")
+      if (!newSlot.day || !newSlot.from || !newSlot.to) {
+        setError("Day, from, and to are required")
+        return
+      }
+      if (newSlot.from >= newSlot.to) {
+        setError("'From' must be earlier than 'To'")
+        return
+      }
+      const res = await fetch("/api/availability", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(newSlot),
+      })
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}))
+        throw new Error(data.error || "Failed to add slot")
+      }
+      const created = await res.json()
+      setSlots((prev) => [...prev, { id: created.id, day: created.day, from: created.from, to: created.to }])
+    } catch (e) {
+      console.error(e)
+      setError(e.message || "Could not add slot")
+    }
   }
 
-  const removeSlot = (id) => {
-    setSlots(slots.filter(s => s.id !== id))
+  const removeSlot = async (id) => {
+    try {
+      setError("")
+      const res = await fetch(`/api/availability/${id}`, { method: "DELETE" })
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}))
+        throw new Error(data.error || "Failed to remove slot")
+      }
+      setSlots((prev) => prev.filter((s) => s.id !== id))
+    } catch (e) {
+      console.error(e)
+      setError(e.message || "Could not remove slot")
+    }
   }
 
   return (
@@ -75,13 +130,19 @@ export default function AvailabilityPage() {
               </div>
             </div>
             <Button onClick={addSlot} className="w-full bg-[hsl(var(--primary))] text-white">Add</Button>
+            {error && (
+              <div className="text-sm text-red-600">{error}</div>
+            )}
           </div>
         </Card>
 
         <Card className="p-6 border border-[hsl(var(--border))] lg:col-span-2">
           <h2 className="text-xl font-bold mb-4">Weekly Slots</h2>
           <div className="space-y-3">
-            {slots.length === 0 && (
+            {loading && (
+              <div className="p-4 rounded-lg bg-[hsl(var(--muted))]">Loading availability...</div>
+            )}
+            {!loading && slots.length === 0 && (
               <div className="p-4 rounded-lg bg-[hsl(var(--muted))]">No slots set yet.</div>
             )}
             {slots.map((s) => (
