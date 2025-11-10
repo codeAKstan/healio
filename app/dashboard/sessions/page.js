@@ -6,10 +6,9 @@ import { Button } from "@/components/ui/button"
 
 export default function SessionsPage() {
   const [role, setRole] = useState(null)
-  const [sessions, setSessions] = useState([
-    { id: 1, client: "Alex Johnson", date: "2025-11-10", time: "10:00 AM", status: "confirmed", type: "Video" },
-    { id: 2, client: "Priya Singh", date: "2025-11-11", time: "2:30 PM", status: "pending", type: "In-Person" },
-  ])
+  const [sessions, setSessions] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState("")
 
   useEffect(() => {
     let active = true
@@ -23,6 +22,62 @@ export default function SessionsPage() {
     })()
     return () => { active = false }
   }, [])
+
+  useEffect(() => {
+    if (role !== "therapist") return
+    let active = true
+    ;(async () => {
+      try {
+        setLoading(true)
+        setError("")
+        const res = await fetch("/api/appointments")
+        if (!res.ok) throw new Error("Failed to load sessions")
+        const data = await res.json()
+        const appts = (data.appointments || []).map((a) => ({
+          id: a.id,
+          client: a.patientName || "Patient",
+          date: a.date,
+          time: formatTime(a.time),
+          status: a.status,
+          type: a.sessionType === "in-person" ? "In-Person" : "Video",
+        }))
+        if (active) setSessions(appts)
+      } catch (e) {
+        console.error(e)
+        if (active) setError("Could not load sessions")
+      } finally {
+        if (active) setLoading(false)
+      }
+    })()
+    return () => { active = false }
+  }, [role])
+
+  const formatTime = (t) => {
+    // convert "HH:MM" to 12-hour like "10:00 AM"
+    if (!t || typeof t !== "string") return t || ""
+    const [hStr, mStr] = t.split(":")
+    let h = parseInt(hStr, 10)
+    const m = mStr
+    const ampm = h >= 12 ? "PM" : "AM"
+    h = h % 12
+    if (h === 0) h = 12
+    return `${h}:${m} ${ampm}`
+  }
+
+  const handleCancel = async (id) => {
+    try {
+      setError("")
+      const res = await fetch(`/api/appointments/${id}`, { method: "DELETE" })
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}))
+        throw new Error(d.error || "Failed to cancel session")
+      }
+      setSessions((prev) => prev.filter((s) => s.id !== id))
+    } catch (e) {
+      console.error(e)
+      setError(e.message || "Could not cancel session")
+    }
+  }
 
   if (role && role !== "therapist") {
     return (
@@ -44,6 +99,50 @@ export default function SessionsPage() {
     return colors[status] || colors.pending
   }
 
+  const handleConfirm = async (id) => {
+    try {
+      setError("")
+      const res = await fetch(`/api/appointments/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: "confirmed" }),
+      })
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}))
+        throw new Error(d.error || "Failed to confirm session")
+      }
+      const updated = await res.json()
+      setSessions((prev) => prev.map((s) => (s.id === id ? { ...s, status: updated.status } : s)))
+    } catch (e) {
+      console.error(e)
+      setError(e.message || "Could not confirm session")
+    }
+  }
+
+  const handleReschedule = async (id) => {
+    try {
+      setError("")
+      const date = window.prompt("Enter new date (YYYY-MM-DD)")
+      if (!date) return
+      const time = window.prompt("Enter new time (HH:MM, 24h)")
+      if (!time) return
+      const res = await fetch(`/api/appointments/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ date, time }),
+      })
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}))
+        throw new Error(d.error || "Failed to reschedule session")
+      }
+      const updated = await res.json()
+      setSessions((prev) => prev.map((s) => (s.id === id ? { ...s, date: updated.date, time: formatTime(updated.time) } : s)))
+    } catch (e) {
+      console.error(e)
+      setError(e.message || "Could not reschedule session")
+    }
+  }
+
   return (
     <div className="p-6 md:p-8 space-y-6">
       <div className="flex justify-between items-start">
@@ -55,7 +154,16 @@ export default function SessionsPage() {
       </div>
 
       <div className="space-y-4">
-        {sessions.map((s) => (
+        {loading ? (
+          <Card className="p-12 text-center border border-[hsl(var(--border))]">
+            <p className="text-[hsl(var(--muted-foreground))]">Loading sessions...</p>
+          </Card>
+        ) : sessions.length === 0 ? (
+          <Card className="p-12 text-center border border-[hsl(var(--border))]">
+            <p className="text-[hsl(var(--muted-foreground))]">No sessions yet.</p>
+          </Card>
+        ) : (
+          sessions.map((s) => (
           <Card key={s.id} className="p-6 border border-[hsl(var(--border))]">
             <div className="flex items-start justify-between mb-4">
               <div>
@@ -81,12 +189,19 @@ export default function SessionsPage() {
             </div>
 
             <div className="flex gap-2">
-              <Button variant="outline" className="border-[hsl(var(--border))]">Confirm</Button>
-              <Button variant="outline" className="border-[hsl(var(--border))]">Reschedule</Button>
-              <Button variant="outline" className="border-red-200 text-red-600 hover:bg-red-50 dark:border-red-900 dark:hover:bg-red-900/20">Cancel</Button>
+              <Button onClick={() => handleConfirm(s.id)} variant="outline" className="border-[hsl(var(--border))]">Confirm</Button>
+              <Button onClick={() => handleReschedule(s.id)} variant="outline" className="border-[hsl(var(--border))]">Reschedule</Button>
+              <Button
+                onClick={() => handleCancel(s.id)}
+                variant="outline"
+                className="border-red-200 text-red-600 hover:bg-red-50 dark:border-red-900 dark:hover:bg-red-900/20"
+              >
+                Cancel
+              </Button>
             </div>
           </Card>
-        ))}
+        )))
+        }
       </div>
     </div>
   )

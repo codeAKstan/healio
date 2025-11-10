@@ -34,10 +34,19 @@ export async function GET() {
     // For now, patients see their appointments
     const query = user.role === "patient" ? { patientId: payload.sub } : { therapistId: payload.sub }
     const docs = await Appointment.find(query).sort({ createdAt: -1 }).lean()
+    let patientNames = {}
+    if (user.role === "therapist" && docs.length > 0) {
+      const pIds = Array.from(new Set(docs.map((d) => String(d.patientId))))
+      const patients = await User.find({ _id: { $in: pIds } }).lean()
+      patients.forEach((p) => {
+        patientNames[String(p._id)] = p.name || p.email || "Patient"
+      })
+    }
     const list = docs.map((a) => ({
       id: String(a._id),
       therapistId: String(a.therapistId),
       patientId: String(a.patientId),
+      patientName: patientNames[String(a.patientId)],
       date: a.date,
       time: a.time,
       sessionType: a.sessionType,
