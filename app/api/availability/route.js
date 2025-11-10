@@ -16,7 +16,7 @@ async function verify(token) {
   }
 }
 
-export async function GET() {
+export async function GET(req) {
   try {
     const cookieStore = await cookies()
     const token = cookieStore.get("token")?.value
@@ -26,11 +26,30 @@ export async function GET() {
 
     await connectToDatabase()
     const user = await User.findById(payload.sub).lean()
-    if (!user || user.role !== "therapist") {
+    if (!user) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 })
     }
 
-    const slots = await Availability.find({ therapistId: payload.sub }).sort({ day: 1, from: 1 }).lean()
+    // If a therapistId query param is provided, allow authenticated patients (or anyone logged in)
+    // to fetch that therapist's availability (therapist must be approved).
+    const { searchParams } = new URL(req.url)
+    const therapistId = searchParams.get("therapistId")
+    let targetTherapistId = null
+    if (therapistId) {
+      const therapistUser = await User.findById(therapistId).lean()
+      if (!therapistUser || therapistUser.role !== "therapist" || therapistUser.therapistStatus !== "approved") {
+        return NextResponse.json({ error: "Invalid therapist" }, { status: 400 })
+      }
+      targetTherapistId = therapistId
+    } else {
+      // Default: therapist fetching their own availability
+      if (user.role !== "therapist") {
+        return NextResponse.json({ error: "Forbidden" }, { status: 403 })
+      }
+      targetTherapistId = payload.sub
+    }
+
+    const slots = await Availability.find({ therapistId: targetTherapistId }).sort({ day: 1, from: 1 }).lean()
     const data = slots.map((s) => ({ id: String(s._id), day: s.day, from: s.from, to: s.to }))
     return NextResponse.json({ slots: data })
   } catch (err) {
