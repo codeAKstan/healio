@@ -1,11 +1,30 @@
 "use client"
 
 import Link from "next/link"
+import { useEffect, useState } from "react"
 import { usePathname } from "next/navigation"
 import { Button } from "@/components/ui/button"
 
 export default function Sidebar({ isOpen, onClose }) {
   const pathname = usePathname()
+  const [role, setRole] = useState(null)
+
+  useEffect(() => {
+    let active = true
+    ;(async () => {
+      try {
+        const res = await fetch("/api/auth/me")
+        if (!res.ok) return
+        const data = await res.json()
+        if (active) setRole(data?.role || null)
+      } catch (e) {
+        // noop
+      }
+    })()
+    return () => {
+      active = false
+    }
+  }, [])
   const handleLogout = async () => {
     try {
       const res = await fetch("/api/auth/logout", { method: "POST" })
@@ -16,14 +35,23 @@ export default function Sidebar({ isOpen, onClose }) {
     }
   }
 
-  const navItems = [
-    { href: "/dashboard", icon: "📊", label: "Dashboard" },
-    { href: "/dashboard/mood", icon: "😊", label: "Mood Tracker" },
-    { href: "/dashboard/journal", icon: "📝", label: "Journal" },
-    { href: "/dashboard/resources", icon: "📚", label: "Resources" },
-    { href: "/dashboard/appointments", icon: "📅", label: "Appointments" },
-    { href: "/dashboard/profile", icon: "👤", label: "Profile" },
-  ]
+  const navItems = role === "therapist"
+    ? [
+        { href: "/dashboard", icon: "🧑‍⚕️", label: "Therapist Home" },
+        { href: "/dashboard/clients", icon: "👥", label: "Clients" },
+        { href: "/dashboard/sessions", icon: "📅", label: "Sessions" },
+        { href: "/dashboard/availability", icon: "⏰", label: "Availability" },
+        { href: "/dashboard/resources", icon: "📚", label: "Resources" },
+        { href: "/dashboard/profile", icon: "👤", label: "Profile" },
+      ]
+    : [
+        { href: "/dashboard", icon: "📊", label: "Dashboard" },
+        { href: "/dashboard/mood", icon: "😊", label: "Mood Tracker" },
+        { href: "/dashboard/journal", icon: "📝", label: "Journal" },
+        { href: "/dashboard/resources", icon: "📚", label: "Resources" },
+        { href: "/dashboard/appointments", icon: "📅", label: "Appointments" },
+        { href: "/dashboard/profile", icon: "👤", label: "Profile" },
+      ]
 
   const isActive = (href) => pathname === href
 

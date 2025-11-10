@@ -1,12 +1,14 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import Link from "next/link"
 
 export default function AppointmentsPage() {
+  const [role, setRole] = useState(null)
   const [appointments, setAppointments] = useState([
     {
       id: 1,
@@ -43,6 +45,19 @@ export default function AppointmentsPage() {
     { id: 4, name: "Dr. Robert Taylor", specialization: "Cognitive Therapy", avatar: "RT" },
   ]
 
+  useEffect(() => {
+    let active = true
+    ;(async () => {
+      try {
+        const res = await fetch("/api/auth/me")
+        if (!res.ok) return
+        const data = await res.json()
+        if (active) setRole(data?.role || null)
+      } catch (e) {}
+    })()
+    return () => { active = false }
+  }, [])
+
   const handleBookAppointment = () => {
     if (!bookingData.therapist || !bookingData.date || !bookingData.time) {
       alert("Please fill in all fields")
@@ -77,6 +92,20 @@ export default function AppointmentsPage() {
       completed: "bg-blue-100 dark:bg-blue-900/30 text-blue-700",
     }
     return colors[status] || colors.pending
+  }
+
+  if (role === "therapist") {
+    return (
+      <div className="p-6 md:p-8">
+        <Card className="p-6 border border-[hsl(var(--border))]">
+          <h1 className="text-2xl font-bold mb-2">Appointments are patient-facing</h1>
+          <p className="text-[hsl(var(--muted-foreground))] mb-4">As a therapist, manage sessions instead.</p>
+          <Link href="/dashboard/sessions">
+            <Button className="bg-[hsl(var(--primary))] text-white">Go to Sessions</Button>
+          </Link>
+        </Card>
+      </div>
+    )
   }
 
   return (
